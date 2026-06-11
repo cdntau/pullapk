@@ -37,7 +37,7 @@ jobs:
             gh release create "$PACKAGE" \
               --repo "$REPO" \
               --title "$PACKAGE" \
-              --notes "All APK versions for $PACKAGE from APKPure." \
+              --notes "All APK versions for $PACKAGE" \
               --prerelease
           else
             echo "Release already exists: $PACKAGE"
@@ -74,7 +74,7 @@ jobs:
 
             echo "  ↓ Downloading $VC..."
             mkdir -p /tmp/apk
-            if ! apkeep -a "${PACKAGE}@${VC}" -d apk-pure /tmp/apk 2>&1; then
+            if ! apkeep -a "${PACKAGE}@${VC}" -d apk-pure -r 8 /tmp/apk 2>&1; then
               echo "  ✗ Download failed for $VC — skipping."
               rm -f /tmp/apk/*
               continue
