@@ -1,0 +1,98 @@
+name: APK Downloader
+
+on:
+  workflow_dispatch:
+    inputs:
+      package_name:
+        description: 'Android package name (e.g. com.instagram.android)'
+        required: true
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Install apkeep
+        run: |
+          VERSION=$(curl -s https://api.github.com/repos/EFForg/apkeep/releases/latest | jq -r '.tag_name')
+          curl -sL "https://github.com/EFForg/apkeep/releases/download/${VERSION}/apkeep-x86_64-unknown-linux-gnu" \
+            -o /usr/local/bin/apkeep
+          chmod +x /usr/local/bin/apkeep
+
+      - name: Download and upload APKs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PACKAGE: ${{ github.event.inputs.package_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # ── 1. Ensure release exists ──────────────────────────────────────
+          if ! gh release view "$PACKAGE" --repo "$REPO" &>/dev/null; then
+            echo "Creating release: $PACKAGE"
+            gh release create "$PACKAGE" \
+              --repo "$REPO" \
+              --title "$PACKAGE" \
+              --notes "All APK versions for $PACKAGE from APKPure." \
+              --prerelease
+          else
+            echo "Release already exists: $PACKAGE"
+          fi
+
+          # ── 2. List all versions
+          echo "Fetching version list..."
+          VERSIONS_JSON=$(apkeep -l -a "$PACKAGE" -o 'output_format=json')
+          VERSION_CODES=$(echo "$VERSIONS_JSON" | jq -r --arg pkg "$PACKAGE" '.apps[$pkg].available_versions[].version')
+          TOTAL=$(echo "$VERSION_CODES" | wc -l)
+          echo "Found $TOTAL versions."
+
+          # ── 3. Get already-uploaded assets from the release ───────────────
+          UPLOADED=$(gh release view "$PACKAGE" --repo "$REPO" --json assets \
+            | jq -r '.assets[].name')
+
+          # ── 4. Download + upload missing versions ─────────────────────────
+          START=$(date +%s)
+          LIMIT=$((330 * 60))  # stop at 330 min, 20 min before the 350 min timeout
+
+          for VC in $VERSION_CODES; do
+            # Time check
+            NOW=$(date +%s)
+            if (( NOW - START > LIMIT )); then
+              echo "⏱ Approaching time limit — stopping. Re-run to continue."
+              break
+            fi
+
+            # Skip if any variant of this version is already uploaded
+            if echo "$UPLOADED" | grep -q "^${PACKAGE}@${VC}\."; then
+              echo "  ✓ Already have $VC — skipping."
+              continue
+            fi
+
+            echo "  ↓ Downloading $VC..."
+            mkdir -p /tmp/apk
+            if ! apkeep -a "${PACKAGE}@${VC}" -d apk-pure /tmp/apk 2>&1; then
+              echo "  ✗ Download failed for $VC — skipping."
+              rm -f /tmp/apk/*
+              continue
+            fi
+
+            FILE=$(ls /tmp/apk/ 2>/dev/null | head -1)
+            if [ -z "$FILE" ]; then
+              echo "  ✗ No file found for $VC — skipping."
+              continue
+            fi
+
+            echo "  ↑ Uploading $FILE..."
+            gh release upload "$PACKAGE" "/tmp/apk/$FILE" \
+              --repo "$REPO" \
+              --clobber
+
+            echo "  ✓ Done: $FILE"
+            rm -f /tmp/apk/*
+          done
+
+          echo "Finished."
