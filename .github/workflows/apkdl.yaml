@@ -87,9 +87,13 @@ jobs:
             fi
 
             echo "  ↑ Uploading $FILE..."
-            gh release upload "$PACKAGE" "/tmp/apk/$FILE" \
+            if ! gh release upload "$PACKAGE" "/tmp/apk/$FILE" \
               --repo "$REPO" \
-              --clobber
+              --clobber 2>&1; then
+              echo "  ✗ Upload failed for $VC (likely exceeds 2GB limit) — skipping."
+              rm -f /tmp/apk/*
+              continue
+            fi
 
             echo "  ✓ Done: $FILE"
             rm -f /tmp/apk/*
