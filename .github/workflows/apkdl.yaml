@@ -38,7 +38,6 @@ jobs:
               --repo "$REPO" \
               --title "$PACKAGE" \
               --notes "All APK versions for $PACKAGE" \
-              --prerelease
           else
             echo "Release already exists: $PACKAGE"
           fi
