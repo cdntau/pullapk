@@ -37,7 +37,7 @@ jobs:
             gh release create "$PACKAGE" \
               --repo "$REPO" \
               --title "$PACKAGE" \
-              --notes "All APK versions for $PACKAGE" \
+              --notes "All APK versions for $PACKAGE"
           else
             echo "Release already exists: $PACKAGE"
           fi
