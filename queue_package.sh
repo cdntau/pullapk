@@ -1,4 +1,4 @@
-start=1201
+start=1701
 count=100
 
 sed -n "${start},$((start+count-1))p" /home/kirmola/Downloads/appid.txt | while read -r pkg; do
